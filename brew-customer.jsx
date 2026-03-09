@@ -89,8 +89,26 @@ const _fl = document.createElement("link"); _fl.rel = "stylesheet";
 _fl.href = "https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;0,800;1,400&family=DM+Sans:wght@300;400;500;600&display=swap";
 document.head.appendChild(_fl);
 
+const TABLE_TOKENS = {
+  "xK9mP2qR": 1,
+  "nJ4wL8vY": 2,
+  "pQ6bT3mW": 3,
+  "yH8fV5kC": 4,
+  "rD2gZ9xN": 5,
+  "wA1sM7cL": 6,
+  "eT4jB6pG": 7,
+  "mU9yR3dW": 8,
+  "fC5vK1qH": 9,
+  "hN7xC8bJ": 10
+};
+
 function getTable() {
-  try { const t = parseInt(new URLSearchParams(window.location.search).get("table")); return t >= 1 && t <= 10 ? t : 3; } catch { return 3; }
+  try {
+    const token = new URLSearchParams(window.location.search).get("t");
+    return token && TABLE_TOKENS[token] ? TABLE_TOKENS[token] : null;
+  } catch {
+    return null;
+  }
 }
 const TABLE_NUM = getTable();
 
@@ -166,6 +184,25 @@ function ClosedScreen({ msg }) {
           <div style={{ fontSize: "1.4rem", marginBottom: 6 }}>🕐</div>
           <div style={{ fontFamily: F.title, fontSize: "1rem", fontWeight: 700, color: "#c4501e", marginBottom: 3 }}>{msg || "Opens tomorrow at 12:00 PM"}</div>
           <div style={{ fontSize: ".78rem", color: "#9a7a5a" }}>See you then! ☕</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InvalidTableScreen() {
+  const F = { title: "'Fraunces',serif", body: "'DM Sans',sans-serif" };
+  return (
+    <div style={{ minHeight: "100vh", background: "#fdf8f3", fontFamily: F.body, display: "flex", flexDirection: "column" }}>
+      <style>{CSS}</style>
+      <div style={{ background: "rgba(253,248,243,.97)", borderBottom: "1px solid rgba(59,31,14,.08)", padding: "1rem 1.5rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04" }}>By The Brew</div>
+      </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1.5rem", textAlign: "center" }}>
+        <div style={{ fontSize: "4rem", marginBottom: 16 }}>🚫</div>
+        <div style={{ fontFamily: F.title, fontSize: "2rem", fontWeight: 800, color: "#1a0a04", marginBottom: 12 }}>Invalid Table Link</div>
+        <div style={{ fontSize: "1rem", color: "#9a7a5a", lineHeight: 1.6, maxWidth: 320 }}>
+          Please scan the QR code placed on your table to access the order menu.
         </div>
       </div>
     </div>
@@ -266,6 +303,8 @@ export default function CustomerApp() {
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   // ── LOADING / CHECKING ──────────────────────────────────
+  if (TABLE_NUM === null) return <InvalidTableScreen />;
+
   if (sessionStatus === 'checking' && menuLoading) return (
     <div style={{ minHeight: "100vh", background: "#fdf8f3", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: F.body }}>
       <style>{CSS}</style>

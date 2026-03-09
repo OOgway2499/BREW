@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>By The Brew - Table QR Codes</title>
+
+    <!-- Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;0,800;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- QRCode.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        :root {
+            --bg: #fdf8f3;
+            --text: #1a0a04;
+            --accent: #e8622a;
+            --border: rgba(59, 31, 14, 0.15);
+            --font-title: 'Fraunces', serif;
+            --font-body: 'DM Sans', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #fff;
+            /* White background for printing */
+            font-family: var(--font-body);
+            color: var(--text);
+            padding: 0;
+            margin: 0;
+        }
+
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .card {
+                page-break-inside: avoid;
+            }
+        }
+
+        .print-controls {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+        }
+
+        .print-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 50px;
+            font-family: var(--font-body);
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(232, 98, 42, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .print-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(232, 98, 42, 0.4);
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            padding: 40px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--bg);
+            border: 2px dashed var(--border);
+            border-radius: 24px;
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            position: relative;
+        }
+
+        /* Cutlines helper */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-radius: 32px;
+            pointer-events: none;
+        }
+
+        .cafe-name {
+            font-family: var(--font-title);
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 24px;
+            letter-spacing: -0.5px;
+        }
+
+        .qr-container {
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(59, 31, 14, 0.08);
+            margin-bottom: 24px;
+            border: 1px solid rgba(59, 31, 14, 0.05);
+        }
+
+        .qr-container img {
+            margin: 0 auto;
+        }
+
+        .table-badge {
+            background: var(--accent);
+            color: white;
+            padding: 8px 24px;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 1.4rem;
+            margin-bottom: 16px;
+            font-family: var(--font-title);
+            letter-spacing: 1px;
+        }
+
+        .instruction {
+            font-size: 0.9rem;
+            color: #7a5a4a;
+            line-height: 1.5;
+            max-width: 220px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="print-controls no-print">
+        <button class="print-btn" onclick="window.print()">🖨️ Print QR Codes</button>
+    </div>
+
+    <div class="grid-container" id="qrGrid">
+        <!-- Cards will be generated via JS -->
+    </div>
+
+    <script>
+        const BASE_URL = "https://brew-inky.vercel.app/";
+
+        // Exactly matches the tokens in brew-customer.jsx
+        const TABLE_TOKENS = {
+            "xK9mP2qR": 1,
+            "nJ4wL8vY": 2,
+            "pQ6bT3mW": 3,
+            "yH8fV5kC": 4,
+            "rD2gZ9xN": 5,
+            "wA1sM7cL": 6,
+            "eT4jB6pG": 7,
+            "mU9yR3dW": 8,
+            "fC5vK1qH": 9,
+            "hN7xC8bJ": 10
+        };
+
+        const grid = document.getElementById("qrGrid");
+
+        Object.entries(TABLE_TOKENS).forEach(([token, tableNum]) => {
+            const url = `${BASE_URL}?t=${token}`;
+
+            const card = document.createElement("div");
+            card.className = "card";
+
+            card.innerHTML = `
+        <div class="cafe-name">By The Brew</div>
+        <div class="qr-container" id="qr-${tableNum}"></div>
+        <div class="table-badge">Table ${tableNum}</div>
+        <div class="instruction">Scan this code with your phone camera to view the menu and order.</div>
+      `;
+
+            grid.appendChild(card);
+
+            // Generate QR Code inside the container
+            new QRCode(document.getElementById(`qr-${tableNum}`), {
+                text: url,
+                width: 180,
+                height: 180,
+                colorDark: "#1a0a04",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        });
+    </script>
+
+</body>
+
+</html>
