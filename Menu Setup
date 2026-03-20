@@ -1,0 +1,187 @@
+-- ══════════════════════════════════════════════════════════════
+--  BY THE BREW — DYNAMIC MENU SETUP (ACTUAL MENU)
+--  Run this in Supabase → SQL Editor → New Query
+-- ══════════════════════════════════════════════════════════════
+
+-- 1. Create the menu_items table (if not exists)
+CREATE TABLE IF NOT EXISTS menu_items (
+  id          TEXT PRIMARY KEY,
+  category    TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  price       INTEGER NOT NULL,
+  emoji       TEXT DEFAULT '☕',
+  prep_time   INTEGER DEFAULT 5,
+  tag         TEXT DEFAULT '',
+  available   BOOLEAN DEFAULT true,
+  sort_order  INTEGER DEFAULT 0,
+  is_special  BOOLEAN DEFAULT false, -- New column for Seasonal/Specials
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 1b. Safety check: Add the is_special column if the table already existed
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_special BOOLEAN DEFAULT false;
+
+-- 2. Enable Row Level Security
+ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
+
+-- 3. Allow anyone to read
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read menu" ON menu_items FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- 4. Allow anyone to insert
+DO $$ BEGIN
+  CREATE POLICY "Anyone can insert menu items" ON menu_items FOR INSERT WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- 5. Allow anyone to update
+DO $$ BEGIN
+  CREATE POLICY "Anyone can update menu items" ON menu_items FOR UPDATE USING (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- 6. Allow anyone to delete
+DO $$ BEGIN
+  CREATE POLICY "Anyone can delete menu items" ON menu_items FOR DELETE USING (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- 7. CLEAR OLD DEMO DATA
+DELETE FROM menu_items;
+
+-- 8. INSERT THE REAL MENU
+INSERT INTO menu_items (id, category, name, description, price, emoji, prep_time, tag, sort_order, is_special) VALUES
+
+  -- 🍞 GARLIC BREADS
+  ('gb1', 'Garlic Breads', 'Classic', '', 159, '🥖', 5, '', 10, false),
+  ('gb2', 'Garlic Breads', 'Cheesy', '', 179, '🧀', 6, 'Popular', 11, false),
+  ('gb3', 'Garlic Breads', 'Jalapeño', '', 189, '🌶️', 6, '', 12, false),
+  ('gb4', 'Garlic Breads', 'Rosemary Chicken', '', 209, '🍗', 8, '', 13, false),
+
+  -- 🥪 SANDWICHES
+  ('sw1', 'Sandwiches', 'Gourmet Grilled Cheese', '', 219, '🥪', 8, '', 20, false),
+  ('sw2', 'Sandwiches', 'Corn Meltz', '', 219, '🌽', 8, '', 21, false),
+  ('sw3', 'Sandwiches', 'Creamy ''Shrooms', '', 269, '🍄', 10, '', 22, false),
+  ('sw4', 'Sandwiches', 'Crunchy Paneer', '', 269, '🧀', 10, '', 23, false),
+  ('sw5', 'Sandwiches', 'Paneer Makhani', '', 249, '🥪', 10, '', 24, false),
+  ('sw6', 'Sandwiches', 'Crunchy Chicken', '', 289, '🍗', 12, 'Bestseller', 25, false),
+  ('sw7', 'Sandwiches', 'Chicken Makhani', '', 269, '🥪', 12, '', 26, false),
+  ('sw8', 'Sandwiches', 'Creamy Chicken', '', 289, '🍗', 12, '', 27, false),
+  ('sw9', 'Sandwiches', 'Chipotle Chicken', '', 249, '🌯', 10, '', 28, false),
+
+  -- 🌯 WRAPS
+  ('wr1', 'Wraps', 'Garden Fry', '', 169, '🌯', 8, '', 30, false),
+  ('wr2', 'Wraps', 'Fried Paneer', '', 219, '🧀', 10, '', 31, false),
+  ('wr3', 'Wraps', 'Paneer Makhani', '', 199, '🌯', 10, '', 32, false),
+  ('wr4', 'Wraps', 'Chick ''n'' Cheese', '', 209, '🍗', 10, '', 33, false),
+  ('wr5', 'Wraps', 'Fried Chicken', '', 229, '🍗', 12, 'Popular', 34, false),
+  ('wr6', 'Wraps', 'Wrapzilla', '', 239, '🦖', 12, 'Signature', 35, false),
+
+  -- 🥗 SALADS (Using average price for variations, can be adjusted in description)
+  ('sl1', 'Salads', 'Caesar', 'Veg / Chicken available', 219, '🥗', 8, 'Fresh', 40, false),
+  ('sl2', 'Salads', 'Mexican', 'Veg / Chicken available', 229, '🌽', 8, '', 41, false),
+
+  -- 🍝 PASTAS (Veg / Chicken)
+  ('pa1', 'Pastas', 'Alfredo', 'Veg / Chicken available', 319, '🍝', 15, 'Creamy', 50, false),
+  ('pa2', 'Pastas', 'Arrabiata', 'Veg / Chicken available', 319, '🍅', 15, 'Spicy', 51, false),
+  ('pa3', 'Pastas', 'Creamy Rosso', 'Veg / Chicken available', 329, '🍝', 15, '', 52, false),
+  ('pa4', 'Pastas', 'Pesto', 'Veg / Chicken available', 349, '🌿', 15, '', 53, false),
+  ('pa5', 'Pastas', 'Indie Tikka', 'Veg / Chicken available', 369, '🇮🇳', 15, '', 54, false),
+
+  -- 🍕 PIZZAS
+  ('pz1', 'Pizzas', 'Margherita', '', 279, '🍕', 15, 'Classic', 60, false),
+  ('pz2', 'Pizzas', 'Corn Fiesta', '', 299, '🌽', 15, '', 61, false),
+  ('pz3', 'Pizzas', 'Farmhouse', '', 329, '🥦', 15, '', 62, false),
+  ('pz4', 'Pizzas', 'Mediterranean', '', 329, '🫒', 15, '', 63, false),
+  ('pz5', 'Pizzas', 'Fiery Paneer', '', 349, '🌶️', 15, '', 64, false),
+  ('pz6', 'Pizzas', 'Paneer-e-licious', '', 339, '🧀', 15, '', 65, false),
+  ('pz7', 'Pizzas', 'Pesto Veg', '', 349, '🌿', 15, '', 66, false),
+  ('pz8', 'Pizzas', 'Chicken Tikka', '', 359, '🍗', 18, 'Popular', 67, false),
+  ('pz9', 'Pizzas', 'Satanic Chicken', '', 389, '🔥', 18, 'Spicy', 68, false),
+  ('pz10', 'Pizzas', 'Backyard Smoke Chicken', '', 389, '🪵', 18, '', 69, false),
+  ('pz11', 'Pizzas', 'Chick Max', '', 399, '🍗', 18, '', 70, false),
+  ('pz12', 'Pizzas', 'Kentucky Crunch Chicken', '', 409, '🍗', 18, 'Signature', 71, false),
+
+  -- 🍟 APPETIZERS
+  ('ap1', 'Appetizers', 'Fries', 'Salted / Peri Peri', 149, '🍟', 5, '', 80, false),
+  ('ap2', 'Appetizers', 'Loaded Fries (Veg/Chicken)', '', 189, '🍟', 8, '', 81, false),
+  ('ap3', 'Appetizers', 'Nachos Classic', '', 169, '🧀', 5, '', 82, false),
+  ('ap4', 'Appetizers', 'Loaded Nachos (Veg/Chicken)', '', 189, '🧀', 8, '', 83, false),
+  ('ap5', 'Appetizers', 'Mozzarella Cheese Sticks', '', 269, '🧀', 8, '', 84, false),
+  ('ap6', 'Appetizers', 'Jalapeño Bites', '', 219, '🌶️', 8, '', 85, false),
+  ('ap7', 'Appetizers', 'Onion Rings', '', 209, '🧅', 8, '', 86, false),
+  ('ap8', 'Appetizers', 'Crispy Paneer Pops', '', 239, '🧀', 10, '', 87, false),
+  ('ap9', 'Appetizers', 'Chicken Popcorn', '', 249, '🍗', 10, '', 88, false),
+  ('ap10', 'Appetizers', 'Chicken Garlic Strips', '', 239, '🍗', 10, '', 89, false),
+  ('ap11', 'Appetizers', 'Wings', 'Wild / Peri Peri / BBQ', 259, '🍗', 12, 'Popular', 90, false),
+  ('ap12', 'Appetizers', 'Jamaican Chicken', '', 279, '🍗', 12, '', 91, false),
+  ('ap13', 'Appetizers', 'Cilantro Chicken', '', 289, '🌿', 12, '', 92, false),
+  ('ap14', 'Appetizers', 'Grilled Chicken with Veggies', '', 339, '🥗', 15, 'Healthy', 93, false),
+
+  -- 🧊 ICED TEAS
+  ('it1', 'Iced Teas', 'Lemon', '', 209, '🍋', 3, '', 100, false),
+  ('it2', 'Iced Teas', 'Peach', '', 249, '🍑', 3, 'Popular', 101, false),
+  ('it3', 'Iced Teas', 'Passionfruit', '', 239, '🍹', 3, '', 102, false),
+  ('it4', 'Iced Teas', 'Hibiscus', '', 209, '🌺', 3, '', 103, false),
+
+  -- 🫖 HERBAL TEAS
+  ('ht1', 'Herbal Teas', 'Blue Pea', '', 149, '🫖', 4, '', 110, false),
+  ('ht2', 'Herbal Teas', 'Chamomile', '', 149, '🌼', 4, 'Relaxing', 111, false),
+  ('ht3', 'Herbal Teas', 'Moroccan Mint', '', 149, '🌱', 4, '', 112, false),
+  ('ht4', 'Herbal Teas', 'Kashmiri Kahwa', '', 149, '🍵', 4, '', 113, false),
+  ('ht5', 'Herbal Teas', 'Lavender', '', 149, '🪻', 4, '', 114, false),
+  ('ht6', 'Herbal Teas', 'Apple Cinnamon', '', 149, '🍎', 4, '', 115, false),
+
+  -- 🍫 CHOCOLATE
+  ('ch1', 'Chocolate', 'Coco Shot', '54% / 72%', 129, '🍫', 3, '', 120, false),
+  ('ch2', 'Chocolate', 'Hot Chocolate', '54% / 72%', 269, '☕', 5, 'Comfort', 121, false),
+  ('ch3', 'Chocolate', 'Cold Chocolate', '54% / 72%', 269, '🧊', 4, '', 122, false),
+
+  -- 🍹 MOCKTAILS
+  ('mk1', 'Mocktails', 'Virgin', '', 179, '🍹', 3, '', 130, false),
+  ('mk2', 'Mocktails', 'Blue Curaçao', '', 179, '🌊', 3, '', 131, false),
+  ('mk3', 'Mocktails', 'Berry Breeze', '', 189, '🍓', 3, '', 132, false),
+  ('mk4', 'Mocktails', 'Black Currant', '', 199, '🫐', 3, '', 133, false),
+  ('mk5', 'Mocktails', 'Sparkling Peach', '', 199, '🍑', 3, '', 134, false),
+  ('mk6', 'Mocktails', 'Chilli Guava', '', 159, '🌶️', 3, 'Spicy', 135, false),
+
+  -- ☕ COFFEES (Using Hot base prices, iced versions usually cost slightly more)
+  ('cf1', 'Coffees', 'Espresso', '', 79, '☕', 2, '', 140, false),
+  ('cf2', 'Coffees', 'Doppio', '', 119, '☕', 2, '', 141, false),
+  ('cf3', 'Coffees', 'Americano', 'Hot: 129 / Iced: 169', 129, '☕', 3, '', 142, false),
+  ('cf4', 'Coffees', 'Long Black', 'Hot: 129 / Iced: 169', 129, '☕', 3, '', 143, false),
+  ('cf5', 'Coffees', 'Cortado', '', 139, '☕', 3, '', 144, false),
+  ('cf6', 'Coffees', 'Cappuccino', 'Hot: 179 / Iced: 199', 179, '☕', 4, 'Classic', 145, false),
+  ('cf7', 'Coffees', 'Latte', 'Hot: 189 / Iced: 209', 189, '☕', 4, '', 146, false),
+  ('cf8', 'Coffees', 'Flat White', 'Hot: 189 / Iced: 209', 189, '☕', 4, '', 147, false),
+  ('cf9', 'Coffees', 'Vietnamese', 'Hot: 209 / Iced: 229', 209, '☕', 4, 'Sweet', 148, false),
+  ('cf10', 'Coffees', 'Mocha', 'Hot: 199 / Iced: 209', 199, '🍫', 4, '', 149, false),
+  ('cf11', 'Coffees', 'Affogato', '', 219, '🍨', 2, '', 150, false),
+
+  -- 🌟 COFFEE FUSIONS
+  ('fu1', 'Coffee Fusions', 'Espresso Tonic / Citrus', '', 209, '🍋', 3, 'Fresh', 160, false),
+  ('fu2', 'Coffee Fusions', 'Espresso Cranberry', '', 229, '🍒', 3, '', 161, false),
+  ('fu3', 'Coffee Fusions', 'Cinnamon / Rose Latte', '', 239, '🌹', 4, '', 162, false),
+  ('fu4', 'Coffee Fusions', 'Biscoff / Vanilla Latte', '', 249, '🍪', 4, 'Popular', 163, false),
+  ('fu5', 'Coffee Fusions', 'Hazelnut / Irish Latte', '', 239, '🌰', 4, '', 164, false),
+
+  -- 🧊 COLD BREWS
+  ('cb1', 'Cold Brews', 'Original', '', 209, '🧊', 2, '', 170, false),
+  ('cb2', 'Cold Brews', 'Sunset', '', 229, '🌅', 3, 'Signature', 171, false),
+  ('cb3', 'Cold Brews', 'Winterberry', '', 219, '🍓', 3, '', 172, false),
+  ('cb4', 'Cold Brews', 'Café Cola', '', 219, '🥤', 3, '', 173, false),
+  ('cb5', 'Cold Brews', 'Ginger Zest', '', 219, '🫚', 3, '', 174, false),
+
+  -- 🥤 COLD COFFEES
+  ('cc1', 'Cold Coffees', 'OG', '', 219, '🥤', 4, 'Bestseller', 180, false),
+  ('cc2', 'Cold Coffees', 'Irish / Caramel', '', 239, '🥤', 4, '', 181, false),
+  ('cc3', 'Cold Coffees', 'Hazelnut', '', 249, '🌰', 4, '', 182, false),
+  ('cc4', 'Cold Coffees', 'Choco Chip', '', 249, '🍫', 4, '', 183, false),
+  ('cc5', 'Cold Coffees', 'Brownie', '', 279, '🧁', 5, 'Indulgent', 184, false),
+
+  -- 🍦 SHAKES
+  ('sh1', 'Shakes', 'Biscoff Bliss', '', 259, '🍪', 5, '', 190, false),
+  ('sh2', 'Shakes', 'Triple Berry', '', 249, '🍓', 5, '', 191, false),
+  ('sh3', 'Shakes', 'Oreo', '', 219, '🍪', 5, '', 192, false),
+  ('sh4', 'Shakes', 'Brownie', '', 249, '🧁', 5, '', 193, false),
+  ('sh5', 'Shakes', 'Nutella', '', 249, '🌰', 5, '', 194, false),
+  ('sh6', 'Shakes', 'Strawberry', '', 229, '🍓', 5, '', 195, false);

@@ -237,8 +237,8 @@ function PinScreen({ onUnlock }) {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#3b1f0e,#e8622a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem", boxShadow: "0 8px 24px rgba(251,146,60,.35)" }}>☕</div>
-            <span style={{ fontFamily: "'Fraunces',serif", fontSize: "1.5rem", fontWeight: 800, letterSpacing: -1, color: "#1a0a04" }}>By The Brew</span>
+            <img src="/monkey-logo.png" style={{ width: 36, height: 36, objectFit: "contain" }} alt="" />
+            <span style={{ fontFamily: "'Fraunces',serif", fontSize: "1.5rem", fontWeight: 800, letterSpacing: -1, color: "#1a0a04" }}>Little Monkey Cafe</span>
           </div>
           <div style={{ fontFamily: "'Space Mono',monospace", fontSize: ".62rem", letterSpacing: 4, color: "rgba(232,98,42,.65)", textTransform: "uppercase" }}>Staff Terminal · Authentication</div>
         </div>
@@ -518,7 +518,18 @@ function HistoryTab() {
   const F = { title: "'Fraunces',serif", body: "'DM Sans',sans-serif", mono: "'Space Mono',monospace" };
 
   useEffect(() => {
-    dbGetRecentSessions().then(d => { setSessions(d); setLoading(false); });
+    async function load() {
+      const sessData = await dbGetRecentSessions();
+      setSessions(sessData);
+      setLoading(false);
+      // Pre-fetch orders for all sessions so revenue shows immediately
+      const allOrders = {};
+      await Promise.all(sessData.map(async s => {
+        allOrders[s.id] = await dbGetOrdersForDate(s.id);
+      }));
+      setDayOrds(allOrders);
+    }
+    load();
   }, []);
 
   async function toggleDay(date) {
@@ -584,8 +595,8 @@ function HistoryTab() {
                     {sess.closed_by === "manual" && !isOpen && <span style={{ fontFamily: F.mono, fontSize: ".5rem", background: "rgba(59,31,14,.06)", color: "rgba(59,31,14,.4)", borderRadius: 5, padding: "2px 7px", letterSpacing: 1 }}>CLOSED EARLY</span>}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <span style={{ fontFamily: F.mono, fontSize: ".72rem", color: "rgba(59,31,14,.4)" }}>{sess.order_count || 0} orders</span>
-                    <span style={{ fontFamily: F.title, fontWeight: 800, fontSize: ".85rem", color: "#e8622a" }}>₹{sess.revenue || 0}</span>
+                    <span style={{ fontFamily: F.mono, fontSize: ".72rem", color: "rgba(59,31,14,.4)" }}>{(dayOrders[sess.id] || []).length} orders</span>
+                    <span style={{ fontFamily: F.title, fontWeight: 800, fontSize: ".85rem", color: "#e8622a" }}>₹{(dayOrders[sess.id] || []).filter(o => o.status === "served").reduce((s, o) => s + (o.total || 0), 0)}</span>
                     {openT && <span style={{ fontFamily: F.mono, fontSize: ".58rem", color: "rgba(59,31,14,.28)" }}>{openT} → {closeT || "ongoing"}</span>}
                   </div>
                 </div>
@@ -754,7 +765,7 @@ function Dashboard({ onLogout }) {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 34, height: 34, borderRadius: 9, background: "linear-gradient(135deg,#fb923c,#f97316)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", boxShadow: "0 4px 16px rgba(251,146,60,.3)" }}>☕</div>
           <div>
-            <div style={{ fontFamily: "'Fraunces',serif", fontSize: "1rem", fontWeight: 800, letterSpacing: -.5, color: "#1a0a04" }}>By The Brew <span style={{ color: "rgba(59,31,14,.3)", fontWeight: 700 }}>/ Kitchen</span></div>
+            <div style={{ fontFamily: "'Fraunces',serif", fontSize: "1rem", fontWeight: 800, letterSpacing: -.5, color: "#1a0a04", display: "flex", alignItems: "center", gap: 7 }}><img src="/monkey-logo.png" style={{ width: 24, height: 24, objectFit: "contain" }} alt="" />Little Monkey Cafe <span style={{ color: "rgba(59,31,14,.3)", fontWeight: 700 }}>/ Kitchen</span></div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}>
               <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", animation: "pulse 2.5s infinite", boxShadow: "0 0 6px rgba(34,197,94,.5)" }} />
               <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".52rem", color: "rgba(59,31,14,.35)", letterSpacing: 2 }}>LIVE · POLLING 3s</span>
