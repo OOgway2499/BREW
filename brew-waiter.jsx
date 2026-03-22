@@ -87,7 +87,7 @@ async function dbManualOpenSession(date) {
   }
 }
 async function dbCloseSession(date, by = "manual") {
-  const start = `${date}T06:30:00Z`, end = `${date}T17:30:00Z`;
+  const start = `${date}T00:00:00+05:30`, end = `${date}T23:59:59+05:30`;
   const r = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${start}&created_at=lte.${end}&select=*`, { headers: SB });
   const orders = await r.json() || [];
   const order_count = orders.length;
@@ -102,7 +102,7 @@ async function dbGetRecentSessions(limit = 30) {
   return await r.json() || [];
 }
 async function dbGetOrdersForDate(date) {
-  const start = `${date}T06:30:00Z`, end = `${date}T17:30:00Z`;
+  const start = `${date}T00:00:00+05:30`, end = `${date}T23:59:59+05:30`;
   const r = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${start}&created_at=lte.${end}&select=*&order=created_at.desc`, { headers: SB });
   return await r.json() || [];
 }
@@ -719,10 +719,10 @@ function Dashboard({ onLogout }) {
     await dbUpdateStatus(id, status);
   }
 
-  // Scope all stats to today (IST 12:00 PM – 11:00 PM window = UTC 06:30 – 17:30)
+  // Scope all stats to today (IST 00:00 – 23:59)
   const _today = todayIST();
-  const _tStart = new Date(_today + "T06:30:00Z").getTime();
-  const _tEnd = new Date(_today + "T17:30:00Z").getTime();
+  const _tStart = new Date(_today + "T00:00:00+05:30").getTime();
+  const _tEnd = new Date(_today + "T23:59:59+05:30").getTime();
   const todayOrders = orders.filter(o => { const t = new Date(o.created_at || o.time).getTime(); return t >= _tStart && t <= _tEnd; });
   const pending = todayOrders.filter(o => o.status === "pending").length;
   const preparing = todayOrders.filter(o => o.status === "preparing").length;
@@ -789,30 +789,14 @@ function Dashboard({ onLogout }) {
               <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".62rem", color: "#ef4444", fontWeight: 700, letterSpacing: .5 }}>{unpaidCount} UNPAID</span>
             </div>
           )}
-          {session && (
-            <button onClick={async () => {
-              setSessL(true);
-              const today = todayIST();
-              if (session.status === "open") await dbCloseSession(today, "manual");
-              else await dbManualOpenSession(today);
-              setSession(await dbGetSession(today));
-              setSessL(false);
-            }} disabled={sessLoading} className="btn-action"
-              style={{
-                display: "flex", alignItems: "center", gap: 6, padding: "6px 13px", borderRadius: 8,
-                background: session.status === "open" ? "rgba(22,163,74,.08)" : "rgba(232,98,42,.08)",
-                border: `1px solid ${session.status === "open" ? "rgba(22,163,74,.3)" : "rgba(232,98,42,.3)"}`,
-                color: session.status === "open" ? "#16a34a" : "#c4501e",
-                cursor: "pointer", fontFamily: "'Space Mono',monospace", fontSize: ".58rem", fontWeight: 700, letterSpacing: .5
-              }}>
-              <div style={{
-                width: 6, height: 6, borderRadius: "50%",
-                background: session.status === "open" ? "#22c55e" : "#e8622a",
-                animation: session.status === "open" ? "pulse 2s infinite" : "none"
-              }} />
-              {sessLoading ? "…" : session.status === "open" ? "OPEN · Close Day" : "CLOSED · Open Day"}
-            </button>
-          )}
+          <div style={{ display: "flex", alignItems: "center", background: session?.status === "open" ? "rgba(22,163,74,.08)" : "rgba(239,68,68,.08)", padding: 4, borderRadius: 24, border: `1px solid ${session?.status === "open" ? "rgba(22,163,74,.3)" : "rgba(239,68,68,.3)"}`}}>
+            <button disabled={sessLoading || session?.status === "open"} onClick={async () => {
+              setSessL(true); await dbManualOpenSession(todayIST()); setSession(await dbGetSession(todayIST())); setSessL(false);
+            }} style={{ padding: "6px 14px", borderRadius: 20, border: "none", cursor: session?.status === "open" ? "default" : "pointer", background: session?.status === "open" ? "#22c55e" : "transparent", color: session?.status === "open" ? "#fff" : "rgba(239,68,68,.6)", fontFamily: "'Space Mono',monospace", fontSize: ".6rem", fontWeight: 800, letterSpacing: 1, transition: "all .3s" }}>OPEN</button>
+            <button disabled={sessLoading || session?.status === "closed" || !session} onClick={async () => {
+              setSessL(true); await dbCloseSession(todayIST(), "manual"); setSession(await dbGetSession(todayIST())); setSessL(false);
+            }} style={{ padding: "6px 14px", borderRadius: 20, border: "none", cursor: (session?.status === "closed" || !session) ? "default" : "pointer", background: (session?.status === "closed" || !session) ? "#ef4444" : "transparent", color: (session?.status === "closed" || !session) ? "#fff" : "rgba(22,163,74,.6)", fontFamily: "'Space Mono',monospace", fontSize: ".6rem", fontWeight: 800, letterSpacing: 1, transition: "all .3s" }}>CLOSED</button>
+          </div>
           <button onClick={() => setConfirm(true)} className="btn-action"
             style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,.06)", border: "1px solid rgba(239,68,68,.18)", color: "rgba(239,68,68,.7)", cursor: "pointer", fontFamily: "'Space Mono',monospace", fontSize: ".6rem", fontWeight: 700, letterSpacing: 1 }}>
             LOCK

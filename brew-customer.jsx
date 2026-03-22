@@ -203,31 +203,30 @@ function ClosedScreen({ msg }) {
         <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", display: "flex", alignItems: "center", gap: 8 }}><img src="/chef-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />The Chef Table</div>
         <div style={{ fontFamily: "'Space Mono',monospace", fontSize: ".6rem", color: "rgba(59,31,14,.3)", letterSpacing: 2 }}>12:00 PM – 11:00 PM</div>
       </div>
-      <div style={{ background: "linear-gradient(135deg,#3b1f0e,#e8622a)", padding: "2.5rem 1.5rem 3rem", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: -40, right: -40, width: 200, height: 200, borderRadius: "50%", background: "rgba(255,255,255,.05)" }}></div>
-        <div style={{ position: "relative" }}>
-          <div style={{ fontSize: "3.5rem", marginBottom: 16, animation: "bounce 2s ease infinite" }}>☕</div>
-          <div style={{ fontFamily: F.title, fontSize: "2.1rem", fontWeight: 800, color: "#fff", lineHeight: 1.1, marginBottom: 8, fontStyle: "italic" }}>We're Closed</div>
-          <div style={{ fontSize: ".9rem", color: "rgba(255,255,255,.7)", lineHeight: 1.5 }}>{msg || "Opens tomorrow at 12:00 PM"}</div>
+      <div style={{ background: "linear-gradient(135deg,#1f1410,#3b1f0e)", padding: "3rem 1.5rem 3.5rem", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: -40, right: -40, width: 220, height: 220, borderRadius: "50%", background: "rgba(255,255,255,.03)" }}></div>
+        <div style={{ position: "relative", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style={{ fontSize: "3rem", marginBottom: 18, animation: "fadeUp .8s ease" }}>🌙</div>
+          <div style={{ fontFamily: F.title, fontSize: "1.9rem", fontWeight: 800, color: "#fff", lineHeight: 1.2, marginBottom: 12 }}>The Chef Table is currently resting</div>
+          <div style={{ fontSize: ".9rem", color: "rgba(255,255,255,.6)", lineHeight: 1.6, maxWidth: 280, margin: "0 auto" }}>{msg || "We are preparing for another beautiful day of flavours."}</div>
         </div>
       </div>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "2rem 1.5rem", gap: 14 }}>
-        <div style={{ background: "#fff", borderRadius: 20, padding: "1.8rem", width: "100%", maxWidth: 360, border: "1px solid rgba(59,31,14,.07)", boxShadow: "0 8px 32px rgba(59,31,14,.08)", animation: "fadeUp .5s ease" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "2.5rem 1.5rem", gap: 16 }}>
+        <div style={{ background: "#fff", borderRadius: 20, padding: "1.8rem", width: "100%", maxWidth: 360, border: "1px solid rgba(59,31,14,.07)", boxShadow: "0 12px 40px rgba(59,31,14,.06)", animation: "fadeUp .5s ease" }}>
           <div style={{ fontSize: ".7rem", color: "#c0a090", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16, fontFamily: "'Space Mono',monospace" }}>Café Hours</div>
           {[["🌞", "Opens", "12:00 PM"], ["🕙", "Last Order", "10:45 PM"], ["🔒", "Closes", "11:00 PM"]].map(([icon, label, time]) => (
-            <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(59,31,14,.06)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid rgba(59,31,14,.05)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ fontSize: "1.1rem" }}>{icon}</span>
-                <span style={{ fontSize: ".85rem", color: "#5a3a22" }}>{label}</span>
+                <span style={{ fontSize: ".88rem", color: "#5a3a22", fontWeight: 500 }}>{label}</span>
               </div>
-              <span style={{ fontFamily: F.title, fontWeight: 700, color: "#1a0a04", fontSize: ".92rem" }}>{time}</span>
+              <span style={{ fontFamily: F.title, fontWeight: 700, color: "#1a0a04", fontSize: ".95rem" }}>{time}</span>
             </div>
           ))}
         </div>
-        <div style={{ background: "rgba(232,98,42,.07)", border: "1px solid rgba(232,98,42,.15)", borderRadius: 14, padding: "1.2rem 1.5rem", width: "100%", maxWidth: 360, textAlign: "center" }}>
-          <div style={{ fontSize: "1.4rem", marginBottom: 6 }}>🕐</div>
-          <div style={{ fontFamily: F.title, fontSize: "1rem", fontWeight: 700, color: "#c4501e", marginBottom: 3 }}>{msg || "Opens tomorrow at 12:00 PM"}</div>
-          <div style={{ fontSize: ".78rem", color: "#9a7a5a" }}>See you then! ☕</div>
+        <div style={{ background: "rgba(59,31,14,.05)", borderRadius: 14, padding: "1.2rem 1.5rem", width: "100%", maxWidth: 360, textAlign: "center" }}>
+          <div style={{ fontFamily: F.title, fontSize: "1.05rem", fontWeight: 800, color: "#3b1f0e", marginBottom: 4 }}>See you soon</div>
+          <div style={{ fontSize: ".78rem", color: "#9a7a5a" }}>The menu will automatically unlock at 12 PM.</div>
         </div>
       </div>
     </div>
@@ -547,7 +546,7 @@ export default function CustomerApp() {
       }
     }
     checkSession();
-    const iv = setInterval(checkSession, 60000);
+    const iv = setInterval(checkSession, 10000);
     return () => clearInterval(iv);
   }, []);
 
