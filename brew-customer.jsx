@@ -12,6 +12,36 @@ const SB = {
 };
 
 // ─────────────────────────────────────────────────────────────
+//  PAYMENT CONFIG
+// ─────────────────────────────────────────────────────────────
+// Flip to true when Razorpay API keys are configured in Vercel
+const USE_REAL_PAYMENT = import.meta.env.VITE_PAYMENT_ENABLED === "true";
+const RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY || "rzp_test_XXXXXXXXXX";
+// API routes are on same Vercel domain (/api/*)
+const PAYMENT_API = "";
+
+// ─────────────────────────────────────────────────────────────
+//  RAZORPAY SCRIPT LOADER
+// ─────────────────────────────────────────────────────────────
+let _rzpLoaded = false;
+function loadRazorpayScript(retries = 3) {
+  return new Promise((resolve, reject) => {
+    if (_rzpLoaded || window.Razorpay) { _rzpLoaded = true; return resolve(); }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => { _rzpLoaded = true; resolve(); };
+    script.onerror = () => {
+      if (retries > 1) {
+        setTimeout(() => loadRazorpayScript(retries - 1).then(resolve).catch(reject), 1000);
+      } else {
+        reject(new Error("Failed to load payment gateway"));
+      }
+    };
+    document.head.appendChild(script);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
 //  DB FUNCTIONS
 // ─────────────────────────────────────────────────────────────
 async function dbGetMenu() {
@@ -47,6 +77,20 @@ async function dbInsertOrder(order) {
       note: order.note || "",
       total: order.total,
       status: "pending",
+      payment_status: "pending",
+    }),
+  });
+}
+
+async function dbUpdatePayment(orderId, paymentId, rzpOrderId) {
+  await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orderId}`, {
+    method: "PATCH",
+    headers: { ...SB, "Prefer": "return=minimal" },
+    body: JSON.stringify({
+      payment_status: "paid",
+      payment_id: paymentId,
+      razorpay_order_id: rzpOrderId,
+      paid_at: new Date().toISOString(),
     }),
   });
 }
@@ -156,7 +200,7 @@ function ClosedScreen({ msg }) {
     <div style={{ minHeight: "100vh", background: "#fdf8f3", fontFamily: F.body, display: "flex", flexDirection: "column" }}>
       <style>{CSS}</style>
       <div style={{ background: "rgba(253,248,243,.97)", borderBottom: "1px solid rgba(59,31,14,.08)", padding: "1rem 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", display: "flex", alignItems: "center", gap: 8 }}><img src="/monkey-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />Little Monkey Cafe</div>
+        <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", display: "flex", alignItems: "center", gap: 8 }}><img src="/chef-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />The Chef Table</div>
         <div style={{ fontFamily: "'Space Mono',monospace", fontSize: ".6rem", color: "rgba(59,31,14,.3)", letterSpacing: 2 }}>12:00 PM – 11:00 PM</div>
       </div>
       <div style={{ background: "linear-gradient(135deg,#3b1f0e,#e8622a)", padding: "2.5rem 1.5rem 3rem", position: "relative", overflow: "hidden" }}>
@@ -196,13 +240,263 @@ function InvalidTableScreen() {
     <div style={{ minHeight: "100vh", background: "#fdf8f3", fontFamily: F.body, display: "flex", flexDirection: "column" }}>
       <style>{CSS}</style>
       <div style={{ background: "rgba(253,248,243,.97)", borderBottom: "1px solid rgba(59,31,14,.08)", padding: "1rem 1.5rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", display: "flex", alignItems: "center", gap: 8 }}><img src="/monkey-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />Little Monkey Cafe</div>
+        <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", display: "flex", alignItems: "center", gap: 8 }}><img src="/chef-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />The Chef Table</div>
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1.5rem", textAlign: "center" }}>
         <div style={{ fontSize: "4rem", marginBottom: 16 }}>🚫</div>
         <div style={{ fontFamily: F.title, fontSize: "2rem", fontWeight: 800, color: "#1a0a04", marginBottom: 12 }}>Invalid Table Link</div>
         <div style={{ fontSize: "1rem", color: "#9a7a5a", lineHeight: 1.6, maxWidth: 320 }}>
           Please scan the QR code placed on your table to access the order menu.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MOCK PAYMENT SHEET (Razorpay-style demo)
+// ═══════════════════════════════════════════════════════════════
+function MockPaymentSheet({ amount, onSuccess, onClose }) {
+  const [payTab, setPayTab] = useState("upi");
+  const [upiId, setUpiId] = useState("");
+  const [cardNum, setCardNum] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvv, setCardCvv] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [selectedBank, setSelectedBank] = useState(null);
+  const [selectedWallet, setSelectedWallet] = useState(null);
+  const [payState, setPayState] = useState("form"); // form | processing | success | failed
+  const [failMsg, setFailMsg] = useState("");
+  const txnId = useRef("pay_demo_" + Math.random().toString(36).slice(2, 14));
+
+  const RZP = "#072654";
+  const ACCENT = "#e8622a";
+
+  function processPay() {
+    // Simulate failure for fail@upi
+    if (payTab === "upi" && upiId.toLowerCase().trim() === "fail@upi") {
+      setPayState("processing");
+      setTimeout(() => {
+        setFailMsg("Payment declined by bank. Please try another method.");
+        setPayState("failed");
+      }, 2200);
+      return;
+    }
+    setPayState("processing");
+    setTimeout(() => setPayState("success"), 2200);
+  }
+
+  const canPay = payTab === "upi" ? upiId.includes("@")
+    : payTab === "card" ? cardNum.replace(/\s/g, "").length === 16 && cardExpiry.length >= 4 && cardCvv.length >= 3 && cardName.length > 1
+    : payTab === "bank" ? selectedBank !== null
+    : selectedWallet !== null;
+
+  const UPI_APPS = [
+    { name: "GPay", icon: "🟢", color: "#34A853" },
+    { name: "PhonePe", icon: "🟣", color: "#5f259f" },
+    { name: "Paytm", icon: "🔵", color: "#00BAF2" },
+    { name: "BHIM", icon: "🟠", color: "#ef6c00" },
+  ];
+  const BANKS = [
+    { name: "SBI", color: "#1a237e" }, { name: "HDFC", color: "#004c8c" },
+    { name: "ICICI", color: "#f57c00" }, { name: "Axis", color: "#800020" },
+    { name: "Kotak", color: "#ed1c24" }, { name: "Yes Bank", color: "#0050a0" },
+  ];
+  const WALLETS = [
+    { name: "PhonePe", icon: "🟣" }, { name: "Google Pay", icon: "🟢" },
+    { name: "Paytm", icon: "🔵" }, { name: "Amazon Pay", icon: "🟡" },
+    { name: "BHIM", icon: "🟠" }, { name: "FreeCharge", icon: "🟤" },
+  ];
+
+  const inp = { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid #334155", background: "#0f172a", color: "#e2e8f0", fontSize: ".88rem", outline: "none", fontFamily: "'DM Sans',sans-serif" };
+
+  // Processing screen
+  if (payState === "processing") return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: RZP, borderRadius: 20, padding: "3rem 2.5rem", textAlign: "center", maxWidth: 320, width: "90%", animation: "fadeUp .4s ease" }}>
+        <div style={{ width: 56, height: 56, border: "4px solid rgba(255,255,255,.15)", borderTop: `4px solid ${ACCENT}`, borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 24px" }}></div>
+        <div style={{ color: "#fff", fontSize: "1.1rem", fontWeight: 700, marginBottom: 8 }}>Processing Payment</div>
+        <div style={{ color: "rgba(255,255,255,.5)", fontSize: ".82rem" }}>₹{amount} · Do not close this screen</div>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24 }}>
+          {["🔒 256-bit SSL", "🛡️ PCI DSS", "🏦 RBI Approved"].map(b => (
+            <span key={b} style={{ fontSize: ".6rem", color: "rgba(255,255,255,.3)", letterSpacing: .5 }}>{b}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Success screen
+  if (payState === "success") return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: RZP, borderRadius: 20, padding: "3rem 2.5rem", textAlign: "center", maxWidth: 320, width: "90%", animation: "fadeUp .4s ease" }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(34,197,94,.15)", border: "3px solid #22c55e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem", margin: "0 auto 20px" }}>✓</div>
+        <div style={{ color: "#22c55e", fontSize: "1.3rem", fontWeight: 800, marginBottom: 6 }}>Payment Successful!</div>
+        <div style={{ color: "rgba(255,255,255,.7)", fontSize: ".88rem", marginBottom: 20 }}>₹{amount} paid</div>
+        <div style={{ background: "rgba(255,255,255,.06)", borderRadius: 10, padding: "12px", marginBottom: 20 }}>
+          <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".7rem", marginBottom: 4 }}>Transaction ID</div>
+          <div style={{ color: "#e2e8f0", fontSize: ".82rem", fontFamily: "'Space Mono',monospace", letterSpacing: 1 }}>{txnId.current}</div>
+        </div>
+        <button onClick={() => onSuccess(txnId.current)}
+          style={{ width: "100%", padding: "14px", borderRadius: 10, border: "none", background: "#22c55e", color: "#fff", fontSize: ".95rem", fontWeight: 700, cursor: "pointer" }}>
+          Done ✓
+        </button>
+      </div>
+    </div>
+  );
+
+  // Failed screen
+  if (payState === "failed") return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: RZP, borderRadius: 20, padding: "3rem 2.5rem", textAlign: "center", maxWidth: 320, width: "90%", animation: "fadeUp .4s ease" }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(239,68,68,.15)", border: "3px solid #ef4444", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem", margin: "0 auto 20px" }}>✕</div>
+        <div style={{ color: "#ef4444", fontSize: "1.2rem", fontWeight: 800, marginBottom: 8 }}>Payment Failed</div>
+        <div style={{ color: "rgba(255,255,255,.6)", fontSize: ".85rem", marginBottom: 24, lineHeight: 1.6 }}>{failMsg}</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,.15)", background: "transparent", color: "rgba(255,255,255,.6)", cursor: "pointer", fontWeight: 600 }}>Cancel</button>
+          <button onClick={() => { setPayState("form"); setFailMsg(""); }} style={{ flex: 2, padding: "12px", borderRadius: 10, border: "none", background: ACCENT, color: "#fff", cursor: "pointer", fontWeight: 700 }}>Try Again</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Main payment form
+  const TABS = [["upi", "UPI"], ["card", "Card"], ["bank", "Net Banking"], ["wallet", "Wallets"]];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,.65)", backdropFilter: "blur(6px)" }}>
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, maxHeight: "92vh", overflow: "auto", borderRadius: "20px 20px 0 0", background: RZP, animation: "slideUp .35s cubic-bezier(.32,0,.67,0)", boxShadow: "0 -20px 60px rgba(0,0,0,.5)" }}>
+
+        {/* Demo banner */}
+        <div style={{ background: "#fbbf24", padding: "6px", textAlign: "center", fontSize: ".7rem", fontWeight: 700, color: "#1a0a04", letterSpacing: 1, borderRadius: "20px 20px 0 0" }}>
+          ⚡ DEMO MODE — No real money charged
+        </div>
+
+        {/* Header */}
+        <div style={{ padding: "1.2rem 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+          <div>
+            <div style={{ color: "#fff", fontSize: "1.1rem", fontWeight: 800 }}>The Chef Table</div>
+            <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".78rem" }}>Table {TABLE_NUM} · Order Payment</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ fontFamily: "'Fraunces',serif", fontSize: "1.4rem", fontWeight: 800, color: ACCENT }}>₹{amount}</div>
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(255,255,255,.08)", border: "none", color: "rgba(255,255,255,.5)", cursor: "pointer", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+          {TABS.map(([id, label]) => (
+            <button key={id} onClick={() => setPayTab(id)}
+              style={{ flex: 1, padding: "12px 8px", border: "none", background: "transparent", color: payTab === id ? ACCENT : "rgba(255,255,255,.4)", fontWeight: 700, fontSize: ".78rem", cursor: "pointer", borderBottom: payTab === id ? `2px solid ${ACCENT}` : "2px solid transparent", transition: "all .2s" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Form area */}
+        <div style={{ padding: "1.4rem 1.5rem 2rem" }}>
+
+          {/* UPI */}
+          {payTab === "upi" && (
+            <div style={{ animation: "fadeUp .3s ease" }}>
+              <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".72rem", letterSpacing: 2, marginBottom: 14, textTransform: "uppercase" }}>Enter UPI ID</div>
+              <input style={inp} placeholder="yourname@upi" value={upiId} onChange={e => setUpiId(e.target.value)} />
+              <div style={{ color: "rgba(255,255,255,.25)", fontSize: ".7rem", marginTop: 6, marginBottom: 20 }}>Type fail@upi to simulate decline</div>
+
+              <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".72rem", letterSpacing: 2, marginBottom: 12, textTransform: "uppercase" }}>Or pay using</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                {UPI_APPS.map(app => (
+                  <button key={app.name} onClick={() => { setUpiId(`demo@${app.name.toLowerCase()}`); }}
+                    style={{ padding: "14px 8px", borderRadius: 12, border: upiId.includes(app.name.toLowerCase()) ? `2px solid ${app.color}` : "1px solid rgba(255,255,255,.1)", background: upiId.includes(app.name.toLowerCase()) ? `${app.color}15` : "rgba(255,255,255,.04)", cursor: "pointer", textAlign: "center", transition: "all .2s" }}>
+                    <div style={{ fontSize: "1.5rem", marginBottom: 4 }}>{app.icon}</div>
+                    <div style={{ color: "#e2e8f0", fontSize: ".72rem", fontWeight: 600 }}>{app.name}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Card */}
+          {payTab === "card" && (
+            <div style={{ animation: "fadeUp .3s ease", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".72rem", marginBottom: 6 }}>Card Number</div>
+                <input style={inp} placeholder="4111 1111 1111 1111" maxLength={19}
+                  value={cardNum} onChange={e => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 16);
+                    setCardNum(v.replace(/(.{4})/g, "$1 ").trim());
+                  }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".72rem", marginBottom: 6 }}>Expiry</div>
+                  <input style={inp} placeholder="MM/YY" maxLength={5}
+                    value={cardExpiry} onChange={e => {
+                      let v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      if (v.length > 2) v = v.slice(0, 2) + "/" + v.slice(2);
+                      setCardExpiry(v);
+                    }} />
+                </div>
+                <div>
+                  <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".72rem", marginBottom: 6 }}>CVV</div>
+                  <input style={inp} placeholder="•••" maxLength={4} type="password"
+                    value={cardCvv} onChange={e => setCardCvv(e.target.value.replace(/\D/g, "").slice(0, 4))} />
+                </div>
+              </div>
+              <div>
+                <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".72rem", marginBottom: 6 }}>Cardholder Name</div>
+                <input style={inp} placeholder="Name on card" value={cardName} onChange={e => setCardName(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {/* Net Banking */}
+          {payTab === "bank" && (
+            <div style={{ animation: "fadeUp .3s ease" }}>
+              <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".72rem", letterSpacing: 2, marginBottom: 14, textTransform: "uppercase" }}>Select your bank</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                {BANKS.map(bank => (
+                  <button key={bank.name} onClick={() => setSelectedBank(bank.name)}
+                    style={{ padding: "16px 10px", borderRadius: 12, border: selectedBank === bank.name ? `2px solid ${bank.color}` : "1px solid rgba(255,255,255,.1)", background: selectedBank === bank.name ? `${bank.color}20` : "rgba(255,255,255,.04)", cursor: "pointer", transition: "all .2s" }}>
+                    <div style={{ color: "#e2e8f0", fontSize: ".82rem", fontWeight: 700 }}>{bank.name}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Wallets */}
+          {payTab === "wallet" && (
+            <div style={{ animation: "fadeUp .3s ease" }}>
+              <div style={{ color: "rgba(255,255,255,.4)", fontSize: ".72rem", letterSpacing: 2, marginBottom: 14, textTransform: "uppercase" }}>Select wallet</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                {WALLETS.map(w => (
+                  <button key={w.name} onClick={() => setSelectedWallet(w.name)}
+                    style={{ padding: "14px 8px", borderRadius: 12, border: selectedWallet === w.name ? `2px solid ${ACCENT}` : "1px solid rgba(255,255,255,.1)", background: selectedWallet === w.name ? `${ACCENT}20` : "rgba(255,255,255,.04)", cursor: "pointer", textAlign: "center", transition: "all .2s" }}>
+                    <div style={{ fontSize: "1.3rem", marginBottom: 4 }}>{w.icon}</div>
+                    <div style={{ color: "#e2e8f0", fontSize: ".7rem", fontWeight: 600 }}>{w.name}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pay button */}
+          <button onClick={processPay} disabled={!canPay}
+            style={{ width: "100%", marginTop: 24, padding: "16px", borderRadius: 12, border: "none", background: canPay ? ACCENT : "rgba(255,255,255,.08)", color: canPay ? "#fff" : "rgba(255,255,255,.25)", fontSize: "1rem", fontWeight: 700, cursor: canPay ? "pointer" : "not-allowed", transition: "all .3s", boxShadow: canPay ? "0 8px 24px rgba(232,98,42,.4)" : "none" }}>
+            {canPay ? `Pay ₹${amount}` : "Select a payment method"}
+          </button>
+
+          {/* Security badges */}
+          <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 20 }}>
+            {["🔒 256-bit SSL", "🛡️ PCI DSS", "🏦 RBI Approved"].map(b => (
+              <span key={b} style={{ fontSize: ".62rem", color: "rgba(255,255,255,.25)", letterSpacing: .5 }}>{b}</span>
+            ))}
+          </div>
+          <div style={{ textAlign: "center", marginTop: 10 }}>
+            <span style={{ fontSize: ".6rem", color: "rgba(255,255,255,.15)", letterSpacing: 1 }}>Powered by Razorpay</span>
+          </div>
         </div>
       </div>
     </div>
@@ -223,6 +517,8 @@ export default function CustomerApp() {
   const [orderId, setOrderId] = useState(null);
   const [status, setStatus] = useState("pending");
   const [loading, setLoading] = useState(false);
+  const [showMockPay, setShowMockPay] = useState(false);
+  const pendingOid = useRef(null);
   const pollRef = useRef(null);
   const F = { title: "'Fraunces',serif", body: "'DM Sans',sans-serif" };
 
@@ -290,17 +586,131 @@ export default function CustomerApp() {
     });
   };
 
-  async function placeOrder() {
-    setLoading(true);
-    const oid = `ORD-${Date.now()}`;
-    await dbInsertOrder({ id: oid, table: TABLE_NUM, items: cart, note, total, status: "pending", time: new Date().toISOString() });
-    setOrderId(oid); setPhase("success"); setCartOpen(false); setLoading(false);
+  const [paymentError, setPayError] = useState("");
+
+  function startPolling(oid) {
     pollRef.current = setInterval(async () => {
       const o = await dbGetOrder(oid);
       if (o) setStatus(o.status);
     }, 3000);
   }
+
+  async function placeOrder() {
+    setLoading(true);
+    setPayError("");
+    const oid = `ORD-${Date.now()}`;
+
+    // Step 1: Insert order to Supabase (payment_status: pending)
+    await dbInsertOrder({ id: oid, table: TABLE_NUM, items: cart, note, total });
+
+    // Step 2: If real payment disabled, show mock payment sheet (demo mode)
+    if (!USE_REAL_PAYMENT) {
+      pendingOid.current = oid;
+      setLoading(false);
+      setCartOpen(false);
+      setShowMockPay(true);
+      return;
+    }
+
+    // Step 3: Create Razorpay order via backend
+    let rzpOrder;
+    try {
+      const res = await fetch(`${PAYMENT_API}/api/create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: total * 100, orderId: oid }), // Razorpay uses paise
+      });
+      if (!res.ok) throw new Error("Server error");
+      rzpOrder = await res.json();
+    } catch (err) {
+      setPayError("Payment gateway unavailable. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    // Step 4: Load Razorpay checkout script
+    try {
+      await loadRazorpayScript();
+    } catch (err) {
+      setPayError("Unable to load payment gateway. Check your internet.");
+      setLoading(false);
+      return;
+    }
+
+    // Step 5: Open Razorpay checkout
+    setLoading(false);
+    const razorpay = new window.Razorpay({
+      key: RAZORPAY_KEY,
+      amount: rzpOrder.amount,
+      currency: rzpOrder.currency,
+      name: "The Chef Table",
+      description: `Table ${TABLE_NUM} Order`,
+      order_id: rzpOrder.id,
+      handler: async (response) => {
+        // Step 6: Verify signature on server
+        try {
+          const vRes = await fetch(`${PAYMENT_API}/api/verify-payment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(response),
+          });
+          const { verified } = await vRes.json();
+          if (!verified) {
+            setPayError("Payment verification failed. Contact staff.");
+            return;
+          }
+        } catch (_) {
+          setPayError("Could not verify payment. Contact staff.");
+          return;
+        }
+
+        // Step 7: Mark paid in Supabase
+        await dbUpdatePayment(oid, response.razorpay_payment_id, response.razorpay_order_id);
+        setOrderId(oid);
+        setPhase("success");
+        setCartOpen(false);
+        startPolling(oid);
+      },
+      prefill: { contact: "" },
+      theme: { color: "#e8622a" },
+      modal: {
+        ondismiss: () => {
+          setPayError("Payment cancelled. Tap below to retry.");
+        },
+      },
+    });
+    razorpay.on("payment.failed", (resp) => {
+      const desc = resp?.error?.description || "Payment failed";
+      setPayError(`${desc}. Please try again.`);
+    });
+    razorpay.open();
+  }
+
+  // Retry payment for a pending order
+  async function retryPayment() {
+    setPayError("");
+    setLoading(true);
+    await placeOrder();
+  }
+
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  // Mock payment callbacks
+  async function handleMockPaySuccess(txnId) {
+    const oid = pendingOid.current;
+    if (oid) {
+      try { await dbUpdatePayment(oid, txnId, "demo"); } catch (_) {}
+      setOrderId(oid);
+      setPhase("success");
+      startPolling(oid);
+    }
+    setShowMockPay(false);
+    pendingOid.current = null;
+  }
+  function handleMockPayClose() {
+    setShowMockPay(false);
+    pendingOid.current = null;
+  }
 
   // ── LOADING / CHECKING ──────────────────────────────────
   if (TABLE_NUM === null) return <InvalidTableScreen />;
@@ -309,7 +719,7 @@ export default function CustomerApp() {
     <div style={{ minHeight: "100vh", background: "#fdf8f3", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: F.body }}>
       <style>{CSS}</style>
       <div style={{ fontSize: "3rem", marginBottom: 16, animation: "bounce 1.2s ease infinite" }}>☕</div>
-      <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}><img src="/monkey-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />Little Monkey Cafe</div>
+      <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}><img src="/chef-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />The Chef Table</div>
       <div style={{ fontSize: ".8rem", color: "#c0a090", marginBottom: 20 }}>Loading today's menu…</div>
       <div style={{ width: 28, height: 28, border: "3px solid rgba(232,98,42,.2)", borderTop: "3px solid #e8622a", borderRadius: "50%", animation: "spin .8s linear infinite" }}></div>
     </div>
@@ -337,7 +747,7 @@ export default function CustomerApp() {
       <div style={{ minHeight: "100vh", background: "#fdf8f3", fontFamily: F.body }}>
         <style>{CSS}</style>
         <div style={{ background: "rgba(253,248,243,.97)", borderBottom: "1px solid rgba(59,31,14,.08)", padding: "1rem 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
-          <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", display: "flex", alignItems: "center", gap: 8 }}><img src="/monkey-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />Little Monkey Cafe</div>
+          <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", display: "flex", alignItems: "center", gap: 8 }}><img src="/chef-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />The Chef Table</div>
           <div style={{ background: "rgba(232,98,42,.1)", border: "1px solid rgba(232,98,42,.2)", color: "#c4501e", borderRadius: 20, padding: "4px 14px", fontSize: ".78rem", fontWeight: 600 }}>Table {TABLE_NUM}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "2.5rem 1.5rem", textAlign: "center" }}>
@@ -396,8 +806,8 @@ export default function CustomerApp() {
       <style>{CSS}</style>
       <div style={{ background: "rgba(253,248,243,.97)", borderBottom: "1px solid rgba(59,31,14,.07)", padding: "1rem 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50, backdropFilter: "blur(12px)" }}>
         <div>
-          <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", letterSpacing: "-.5px", display: "flex", alignItems: "center", gap: 8 }}><img src="/monkey-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />Little Monkey Cafe</div>
-          <div style={{ fontSize: ".7rem", color: "#c0a090", letterSpacing: 1 }}>TABLE {TABLE_NUM} · ORDER MENU</div>
+          <div style={{ fontFamily: F.title, fontSize: "1.4rem", fontWeight: 800, color: "#1a0a04", letterSpacing: "-.5px", display: "flex", alignItems: "center", gap: 8 }}><img src="/chef-logo.png" style={{ width: 28, height: 28, objectFit: "contain" }} alt="" />The Chef Table</div>
+          <div style={{ fontSize: ".65rem", color: "#c0a090", letterSpacing: 3, fontFamily: "'Space Mono',monospace", textTransform: "uppercase" }}>House of Flavours</div>
         </div>
         <div style={{ background: "rgba(232,98,42,.1)", border: "1px solid rgba(232,98,42,.2)", color: "#c4501e", borderRadius: 20, padding: "5px 14px", fontSize: ".78rem", fontWeight: 700 }}>📍 Table {TABLE_NUM}</div>
       </div>
@@ -520,14 +930,27 @@ export default function CustomerApp() {
                 <span style={{ fontWeight: 600, color: "#5a3a22", fontSize: ".9rem" }}>Total</span>
                 <span style={{ fontFamily: F.title, fontWeight: 800, fontSize: "1.1rem", color: "#1a0a04" }}>₹{total}</span>
               </div>
+              {paymentError && (
+                <div style={{ background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.2)", borderRadius: 12, padding: "12px 16px", marginBottom: 12, textAlign: "center" }}>
+                  <div style={{ fontSize: ".85rem", color: "#ef4444", fontWeight: 600, marginBottom: 6 }}>{paymentError}</div>
+                  <button onClick={retryPayment} style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid rgba(232,98,42,.3)", background: "rgba(232,98,42,.08)", color: "#e8622a", cursor: "pointer", fontWeight: 700, fontSize: ".82rem" }}>🔄 Retry Payment</button>
+                </div>
+              )}
               <button onClick={placeOrder} disabled={loading}
                 style={{ width: "100%", background: loading ? "rgba(232,98,42,.5)" : "linear-gradient(135deg,#e8622a,#c4501e)", border: "none", borderRadius: 14, padding: "17px", color: "#fff", fontFamily: F.body, fontSize: "1rem", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", boxShadow: loading ? "none" : "0 8px 24px rgba(232,98,42,.3)", transition: "all .3s" }}>
-                {loading ? "⏳ Placing Order..." : `✓ Confirm Order · ₹${total}`}
+                {loading ? "⏳ Processing..." : `💳 Pay & Order · ₹${total}`}
               </button>
-              <div style={{ textAlign: "center", fontSize: ".75rem", color: "#c0a090", marginTop: 10 }}>Payment at counter after your meal</div>
+              <div style={{ textAlign: "center", fontSize: ".75rem", color: "#c0a090", marginTop: 10 }}>Secure payment via Razorpay · UPI / Card / Net Banking</div>
             </div>
           </div>
         </div>
+      )}
+      {showMockPay && (
+        <MockPaymentSheet
+          amount={total}
+          onSuccess={handleMockPaySuccess}
+          onClose={handleMockPayClose}
+        />
       )}
     </div>
   );

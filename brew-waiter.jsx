@@ -237,8 +237,8 @@ function PinScreen({ onUnlock }) {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <img src="/monkey-logo.png" style={{ width: 36, height: 36, objectFit: "contain" }} alt="" />
-            <span style={{ fontFamily: "'Fraunces',serif", fontSize: "1.5rem", fontWeight: 800, letterSpacing: -1, color: "#1a0a04" }}>Little Monkey Cafe</span>
+            <img src="/chef-logo.png" style={{ width: 36, height: 36, objectFit: "contain" }} alt="" />
+            <span style={{ fontFamily: "'Fraunces',serif", fontSize: "1.5rem", fontWeight: 800, letterSpacing: -1, color: "#1a0a04" }}>The Chef Table</span>
           </div>
           <div style={{ fontFamily: "'Space Mono',monospace", fontSize: ".62rem", letterSpacing: 4, color: "rgba(232,98,42,.65)", textTransform: "uppercase" }}>Staff Terminal · Authentication</div>
         </div>
@@ -727,10 +727,15 @@ function Dashboard({ onLogout }) {
   const pending = todayOrders.filter(o => o.status === "pending").length;
   const preparing = todayOrders.filter(o => o.status === "preparing").length;
   const served = todayOrders.filter(o => o.status === "served").length;
-  const revenue = todayOrders.filter(o => o.status === "served").reduce((s, o) => s + o.total, 0);
+  // Revenue only counts orders that are both served AND paid
+  const revenue = todayOrders.filter(o => o.status === "served" && o.payment_status === "paid").reduce((s, o) => s + o.total, 0);
+  const unpaidCount = todayOrders.filter(o => o.payment_status !== "paid").length;
   const filtered = tableFilter
     ? todayOrders.filter(o => o.table_num === tableFilter)
-    : filter === "all" ? todayOrders : todayOrders.filter(o => o.status === filter);
+    : filter === "all" ? todayOrders
+    : filter === "paid" ? todayOrders.filter(o => o.payment_status === "paid")
+    : filter === "unpaid" ? todayOrders.filter(o => o.payment_status !== "paid")
+    : todayOrders.filter(o => o.status === filter);
 
   // FIX: use created_at (Supabase field) not time
   const minsAgo = t => { const d = new Date(t); return isNaN(d) ? "?" : Math.max(0, Math.floor((now - d) / 60000)); };
@@ -765,7 +770,7 @@ function Dashboard({ onLogout }) {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 34, height: 34, borderRadius: 9, background: "linear-gradient(135deg,#fb923c,#f97316)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", boxShadow: "0 4px 16px rgba(251,146,60,.3)" }}>☕</div>
           <div>
-            <div style={{ fontFamily: "'Fraunces',serif", fontSize: "1rem", fontWeight: 800, letterSpacing: -.5, color: "#1a0a04", display: "flex", alignItems: "center", gap: 7 }}><img src="/monkey-logo.png" style={{ width: 24, height: 24, objectFit: "contain" }} alt="" />Little Monkey Cafe <span style={{ color: "rgba(59,31,14,.3)", fontWeight: 700 }}>/ Kitchen</span></div>
+            <div style={{ fontFamily: "'Fraunces',serif", fontSize: "1rem", fontWeight: 800, letterSpacing: -.5, color: "#1a0a04", display: "flex", alignItems: "center", gap: 7 }}><img src="/chef-logo.png" style={{ width: 24, height: 24, objectFit: "contain" }} alt="" />The Chef Table <span style={{ color: "rgba(59,31,14,.3)", fontWeight: 700 }}>/ Kitchen</span></div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}>
               <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", animation: "pulse 2.5s infinite", boxShadow: "0 0 6px rgba(34,197,94,.5)" }} />
               <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".52rem", color: "rgba(59,31,14,.35)", letterSpacing: 2 }}>LIVE · POLLING 3s</span>
@@ -777,6 +782,11 @@ function Dashboard({ onLogout }) {
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(232,98,42,.1)", border: "1px solid rgba(232,98,42,.25)", borderRadius: 8, padding: "5px 10px", animation: "glow 2s infinite" }}>
               <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#e8622a", animation: "pulse 1s infinite" }} />
               <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".62rem", color: "#c4501e", fontWeight: 700, letterSpacing: .5 }}>{pending} NEW</span>
+            </div>
+          )}
+          {unpaidCount > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.2)", borderRadius: 8, padding: "5px 10px" }}>
+              <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".62rem", color: "#ef4444", fontWeight: 700, letterSpacing: .5 }}>{unpaidCount} UNPAID</span>
             </div>
           )}
           {session && (
@@ -873,10 +883,10 @@ function Dashboard({ onLogout }) {
         <>
           {/* Filter bar */}
           <div style={{ padding: "0 1.4rem .9rem", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            {["all", "pending", "preparing", "served"].map(f => (
+            {["all", "pending", "preparing", "served", "paid", "unpaid"].map(f => (
               <button key={f} onClick={() => { setFilter(f); setTblF(null); }} className="tab-btn"
-                style={{ padding: "5px 13px", borderRadius: 8, border: `1px solid ${filter === f && !tableFilter ? "rgba(232,98,42,.4)" : "rgba(59,31,14,.1)"}`, background: filter === f && !tableFilter ? "rgba(232,98,42,.08)" : "transparent", color: filter === f && !tableFilter ? "#c4501e" : "rgba(59,31,14,.4)", cursor: "pointer", fontFamily: "'Space Mono',monospace", fontSize: ".6rem", fontWeight: 700, letterSpacing: .5 }}>
-                {f.toUpperCase()}{f !== "all" && ` (${todayOrders.filter(o => o.status === f).length})`}
+                style={{ padding: "5px 13px", borderRadius: 8, border: `1px solid ${filter === f && !tableFilter ? (f === "paid" ? "rgba(22,163,74,.4)" : f === "unpaid" ? "rgba(239,68,68,.4)" : "rgba(232,98,42,.4)") : "rgba(59,31,14,.1)"}`, background: filter === f && !tableFilter ? (f === "paid" ? "rgba(22,163,74,.08)" : f === "unpaid" ? "rgba(239,68,68,.08)" : "rgba(232,98,42,.08)") : "transparent", color: filter === f && !tableFilter ? (f === "paid" ? "#16a34a" : f === "unpaid" ? "#ef4444" : "#c4501e") : "rgba(59,31,14,.4)", cursor: "pointer", fontFamily: "'Space Mono',monospace", fontSize: ".6rem", fontWeight: 700, letterSpacing: .5 }}>
+                {f.toUpperCase()}{f === "paid" ? ` (${todayOrders.filter(o => o.payment_status === "paid").length})` : f === "unpaid" ? ` (${unpaidCount})` : f !== "all" ? ` (${todayOrders.filter(o => o.status === f).length})` : ""}
               </button>
             ))}
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
@@ -929,10 +939,23 @@ function Dashboard({ onLogout }) {
                         </div>
                       </div>
                     </div>
-                    {/* Status chip */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, background: st.bg, border: `1px solid ${st.border}`, borderRadius: 8, padding: "6px 12px" }}>
-                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: st.dot, animation: order.status !== "served" ? "pulse 1.5s infinite" : "none" }} />
-                      <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".6rem", color: st.color, fontWeight: 700, letterSpacing: .5 }}>{st.label.toUpperCase()}</span>
+                    {/* Status chip + Payment badge */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {/* Payment badge */}
+                      {order.payment_status === "paid" ? (
+                        <div style={{ background: "rgba(22,163,74,.08)", border: "1px solid rgba(22,163,74,.25)", borderRadius: 8, padding: "6px 10px" }}>
+                          <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".58rem", color: "#16a34a", fontWeight: 700, letterSpacing: .5 }}>PAID ✓</span>
+                        </div>
+                      ) : (
+                        <div style={{ background: "rgba(239,68,68,.06)", border: "1px solid rgba(239,68,68,.2)", borderRadius: 8, padding: "6px 10px" }}>
+                          <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".58rem", color: "#ef4444", fontWeight: 700, letterSpacing: .5 }}>UNPAID</span>
+                        </div>
+                      )}
+                      {/* Status chip */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, background: st.bg, border: `1px solid ${st.border}`, borderRadius: 8, padding: "6px 12px" }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: st.dot, animation: order.status !== "served" ? "pulse 1.5s infinite" : "none" }} />
+                        <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".6rem", color: st.color, fontWeight: 700, letterSpacing: .5 }}>{st.label.toUpperCase()}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -962,12 +985,17 @@ function Dashboard({ onLogout }) {
 
                   {/* Actions */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", background: "rgba(59,31,14,.02)" }}>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {order.status === "pending" && (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      {order.status === "pending" && order.payment_status === "paid" && (
                         <button className="btn-action" onClick={() => updateStatus(order.id, "preparing")}
                           style={{ padding: "7px 18px", borderRadius: 9, border: "1px solid rgba(217,119,6,.3)", background: "rgba(217,119,6,.08)", color: "#b45309", cursor: "pointer", fontWeight: 700, fontSize: ".8rem", letterSpacing: .3 }}>
                           ▶ Start Preparing
                         </button>
+                      )}
+                      {order.status === "pending" && order.payment_status !== "paid" && (
+                        <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".62rem", color: "#ef4444", letterSpacing: 1, display: "flex", alignItems: "center", gap: 5 }}>
+                          ⏳ AWAITING PAYMENT
+                        </span>
                       )}
                       {order.status === "preparing" && (
                         <button className="btn-action" onClick={() => updateStatus(order.id, "served")}
@@ -979,7 +1007,7 @@ function Dashboard({ onLogout }) {
                         <span style={{ fontFamily: "'Space Mono',monospace", fontSize: ".62rem", color: "rgba(22,163,74,.5)", letterSpacing: 1 }}>✓ COMPLETE</span>
                       )}
                     </div>
-                    <span style={{ fontFamily: "'Fraunces',serif", fontSize: "1rem", fontWeight: 800, color: "rgba(59,31,14,.4)" }}>₹{order.total}</span>
+                    <span style={{ fontFamily: "'Fraunces',serif", fontSize: "1rem", fontWeight: 800, color: order.payment_status === "paid" ? "#16a34a" : "rgba(59,31,14,.4)" }}>₹{order.total}</span>
                   </div>
                 </div>
               );
