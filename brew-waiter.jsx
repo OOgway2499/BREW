@@ -88,7 +88,7 @@ async function dbManualOpenSession(date) {
 }
 async function dbCloseSession(date, by = "manual") {
   const start = `${date}T00:00:00+05:30`, end = `${date}T23:59:59+05:30`;
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${start}&created_at=lte.${end}&select=*`, { headers: SB });
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${encodeURIComponent(start)}&created_at=lte.${encodeURIComponent(end)}&select=*`, { headers: SB });
   const orders = await r.json() || [];
   const order_count = orders.length;
   const revenue = orders.filter(o => o.status === "served").reduce((s, o) => s + (o.total || 0), 0);
@@ -103,7 +103,7 @@ async function dbGetRecentSessions(limit = 30) {
 }
 async function dbGetOrdersForDate(date) {
   const start = `${date}T00:00:00+05:30`, end = `${date}T23:59:59+05:30`;
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${start}&created_at=lte.${end}&select=*&order=created_at.desc`, { headers: SB });
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${encodeURIComponent(start)}&created_at=lte.${encodeURIComponent(end)}&select=*&order=created_at.desc`, { headers: SB });
   return await r.json() || [];
 }
 
